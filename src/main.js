@@ -59,8 +59,12 @@ static getStubConfig(hass, unusedEntities, allEntities) {
       condition_icons: true,
       round_temp: false,
       type: 'daily',
-      number_of_forecasts: '0', 
-      disable_animation: false, 
+      number_of_forecasts: '0',
+      disable_animation: false,
+      show_hourly_date: true,
+      show_precip_unit: true,
+      show_wind_unit: true,
+      override_min_column_width: '0',
     },
   };
 }
@@ -121,6 +125,10 @@ setConfig(config) {
       type: 'daily',
       number_of_forecasts: '0',
       '12hourformat': false,
+      show_hourly_date: true,
+      show_precip_unit: true,
+      show_wind_unit: true,
+      override_min_column_width: '0',
       ...config.forecast,
     },
     units: {
@@ -135,10 +143,39 @@ setConfig(config) {
     'https://cdn.jsdelivr.net/gh/mlamberts78/weather-chart-card/dist/icons2/':
     'https://cdn.jsdelivr.net/gh/mlamberts78/weather-chart-card/dist/icons/' ;
 
-  this.config = cardConfig;
+  // Find minimum column width if not manually set.
+  if (cardConfig.forecast.override_min_column_width > 0) {
+    this.columnMinWidth = cardConfig.forecast.override_min_column_width;
+  } else {
+    let fontSize = cardConfig.forecast.labels_font_size;
 
-  let fontSize = this.config.forecast.labels_font_size;
-  this.columnMinWidth = Math.max(fontSize * 5, 48); // 48 allows space for wind speed
+    let minWidthForIconAndWind;
+    if (cardConfig.forecast.show_wind_forecast && cardConfig.forecast.show_wind_unit) {
+      minWidthForIconAndWind = 48;
+    } else {
+      minWidthForIconAndWind = 26;
+    }
+
+    let minWidthForChartLabels;
+    if (cardConfig.forecast.show_precip_unit) {
+      minWidthForChartLabels = fontSize * 5;
+    } else {
+      minWidthForChartLabels = fontSize * 3.5;
+    }
+
+    if (cardConfig.forecast.type === 'hourly' && cardConfig.forecast.show_hourly_date) {
+      // Use a wider column width to help ensure date can always fit.
+      // 70 seems to be enough for most locales, hopefully. Not really a
+      // one-size-fits-all thing though, because increasing this too much will
+      // negatively impact users who don't need it.
+      // Users who notice and care can always manually set their own minimum.
+      this.columnMinWidth = Math.max(70, minWidthForChartLabels, minWidthForIconAndWind);
+    } else {
+      this.columnMinWidth = Math.max(minWidthForChartLabels, minWidthForIconAndWind);
+    }
+  }
+
+  this.config = cardConfig;
 
   if (!config.entity) {
     throw new Error('Please, define entity in the card config');
@@ -601,8 +638,8 @@ drawChart({ config, language, weather, forecastItems } = this) {
   if (config.forecast.precipitation_type !== 'rainfall') {
     var precipUnit = '%';
   } else {
-    var precipUnitUnlocal = weather.attributes.precipitation_unit;
-    var precipUnit = this.ll('units')[precipUnitUnlocal];
+    var precipUnitRaw = weather.attributes.precipitation_unit;
+    var precipUnit = this.ll('units')[precipUnitRaw];
   }
   const data = this.computeForecastData();
 
@@ -624,9 +661,9 @@ drawChart({ config, language, weather, forecastItems } = this) {
     precipMax = 100;
   } else {
     if (config.forecast.type === 'hourly') {
-      precipMax = precipUnitUnlocal === 'mm' ? 4 : precipUnitUnlocal === 'cm' ? 0.4 : 0.2;
+      precipMax = precipUnitRaw === 'mm' ? 4 : precipUnitRaw === 'cm' ? 0.4 : 0.2;
     } else {
-      precipMax = precipUnitUnlocal === 'mm' ? 20 : precipUnitUnlocal === 'cm' ? 2 : 1;
+      precipMax = precipUnitRaw === 'mm' ? 20 : precipUnitRaw === 'cm' ? 2 : 1;
     }
   }
 
@@ -674,13 +711,14 @@ drawChart({ config, language, weather, forecastItems } = this) {
 
         let formattedValue;
         if (config.forecast.precipitation_type === 'rainfall') {
+          let unit = config.forecast.show_precip_unit ? ' ' + precipUnit : '';
           if (probability !== undefined && probability !== null && config.forecast.show_probability) {
-            formattedValue = `${rainfall > 9 ? Math.round(rainfall) : rainfall.toFixed(1)} ${precipUnit}\n${Math.round(probability)}%`;
+            formattedValue = `${rainfall > 9 ? Math.round(rainfall) : rainfall.toFixed(1)}${unit}\n${Math.round(probability)}%`;
           } else {
-            formattedValue = `${rainfall > 9 ? Math.round(rainfall) : rainfall.toFixed(1)} ${precipUnit}`;
+            formattedValue = `${rainfall > 9 ? Math.round(rainfall) : rainfall.toFixed(1)}${unit}`;
           }
         } else {
-          formattedValue = `${rainfall > 9 ? Math.round(rainfall) : rainfall.toFixed(1)} ${precipUnit}`;
+          formattedValue = `${rainfall > 9 ? Math.round(rainfall) : rainfall.toFixed(1)}%`;
         }
 
         formattedValue = formattedValue.replace('\n', '\n\n');
@@ -767,7 +805,12 @@ drawChart({ config, language, weather, forecastItems } = this) {
               callback: function (value, index, values) {
                   var datetime = this.getLabelForValue(value);
                   var dateObj = new Date(datetime);
-        
+
+                  if (config.forecast.type !== 'hourly') {
+                      var weekday = dateObj.toLocaleString(language, { weekday: 'short' }).toUpperCase();
+                      return weekday;
+                  }
+
                   var timeFormatOptions = {
                       hour12: config.use_12hour_format,
                       hour: 'numeric',
@@ -775,23 +818,17 @@ drawChart({ config, language, weather, forecastItems } = this) {
                   };
 
                   var time = dateObj.toLocaleTimeString(language, timeFormatOptions);
+                  time = time.replace('a.m.', 'AM').replace('p.m.', 'PM');
 
-                  if (dateObj.getHours() === 0 && dateObj.getMinutes() === 0 && config.forecast.type === 'hourly') {
+                  if (config.forecast.show_hourly_date && dateObj.getHours() === 0 && dateObj.getMinutes() === 0) {
                       var dateFormatOptions = {
                           day: 'numeric',
                           month: 'short',
                       };
                       var date = dateObj.toLocaleDateString(language, dateFormatOptions);
-                      time = time.replace('a.m.', 'AM').replace('p.m.', 'PM');
                       return [date, time];
                   }
 
-                  if (config.forecast.type !== 'hourly') {
-                      var weekday = dateObj.toLocaleString(language, { weekday: 'short' }).toUpperCase();
-                      return weekday;
-                  }
-
-                  time = time.replace('a.m.', 'AM').replace('p.m.', 'PM');
                   return time;
               },
           },
@@ -862,8 +899,10 @@ drawChart({ config, language, weather, forecastItems } = this) {
       var probability = data.forecast[context.dataIndex].precipitation_probability;
       var unit = context.datasetIndex === 2 ? precipUnit : tempUnit;
 
-      if (config.forecast.precipitation_type === 'rainfall' && context.datasetIndex === 2 && config.forecast.show_probability && probability !== undefined && probability !== null) {
+      if (context.datasetIndex === 2 && config.forecast.precipitation_type === 'rainfall' && config.forecast.show_probability && probability !== undefined && probability !== null) {
         return label + ': ' + value + ' ' + precipUnit + ' / ' + Math.round(probability) + '%';
+      } else if (context.datasetIndex === 2 && config.forecast.precipitation_type !== 'rainfall') {
+        return label + ': ' + value + '%';
       } else {
         return label + ': ' + value + ' ' + unit;
       }
@@ -1047,8 +1086,10 @@ updateChart({ forecasts, forecastChart } = this) {
           line-height: 1;
         }
         .wind-speed-wrap {
-          width: fit-content;
-          margin: -0.4em auto 0;
+          width: 100%;
+          margin: 0 auto;
+          text-align: center;
+          line-height: 1;
         }
         .wind-speed {
           font-size: 11px;
@@ -1057,6 +1098,7 @@ updateChart({ forecasts, forecastChart } = this) {
           margin-inline-end: 1px;
         }
         .wind-unit {
+          display: inline-block;
           font-size: 9px;
           margin-left: 1px;
           margin-inline-start: 1px;
@@ -1390,6 +1432,7 @@ renderForecastConditionIcons({ config, forecastItems, sun } = this) {
 
 renderWind({ config, weather, windDirection, forecastItems } = this) {
   const showWindForecast = config.forecast.show_wind_forecast !== false;
+  const showWindUnit = config.forecast.show_wind_unit;
 
   if (!showWindForecast) {
     return html``;
@@ -1414,7 +1457,8 @@ renderWind({ config, weather, windDirection, forecastItems } = this) {
             <div class="wind-detail">
               <ha-icon class="wind-icon" icon="hass:${this.getWindDirIcon(item.wind_bearing)}"></ha-icon>
               <div class="wind-speed-wrap">
-                <span class="wind-speed">${dWindSpeed}</span><span class="wind-unit">${this.ll('units')[this.unitSpeed]}</span>
+                <span class="wind-speed">${dWindSpeed}</span>${showWindUnit ?
+                html`<span class="wind-unit">${this.ll('units')[this.unitSpeed]}</span>` : ''}
               </div>
             </div>
           `;

@@ -693,6 +693,15 @@ class WeatherChartCardEditor extends LitElement {
           </div>
           <div class="switch-container">
             <ha-switch
+              @change="${(e) => this._valueChanged(e, 'forecast.show_wind_unit')}"
+              .checked="${forecastConfig.show_wind_unit !== false}"
+            ></ha-switch>
+            <label class="switch-label">
+              Show Wind Unit
+            </label>
+          </div>
+          <div class="switch-container">
+            <ha-switch
               @change="${(e) => this._valueChanged(e, 'forecast.round_temp')}"
               .checked="${forecastConfig.round_temp !== false}"
             ></ha-switch>
@@ -707,6 +716,15 @@ class WeatherChartCardEditor extends LitElement {
             ></ha-switch>
             <label class="switch-label">
               Disable Chart Animation
+            </label>
+          </div>
+          <div class="switch-container">
+            <ha-switch
+              @change="${(e) => this._valueChanged(e, 'forecast.show_hourly_date')}"
+              .checked="${forecastConfig.show_hourly_date !== false}"
+            ></ha-switch>
+            <label class="switch-label">
+              Show Date at Midnight
             </label>
           </div>
 	  <div class="textfield-container">
@@ -731,6 +749,15 @@ class WeatherChartCardEditor extends LitElement {
                Show precipitation probability
              </label>
          </div>
+          <div class="switch-container">
+            <ha-switch
+              @change="${(e) => this._valueChanged(e, 'forecast.show_precip_unit')}"
+              .checked="${forecastConfig.show_precip_unit !== false}"
+            ></ha-switch>
+            <label class="switch-label">
+              Show Precipitation Unit
+            </label>
+          </div>
           <div class="textfield-container">
             <div class="flex-container">
               <ha-textfield
@@ -760,6 +787,16 @@ class WeatherChartCardEditor extends LitElement {
                 type="number"
                 .value="${forecastConfig.number_of_forecasts || '0'}"
                 @change="${(e) => this._valueChanged(e, 'forecast.number_of_forecasts')}"
+              ></ha-textfield>
+              </div>
+              <div class="flex-container">
+              <ha-textfield
+                label="Minimum column width"
+                type="number"
+                max="100"
+                min="0"
+                .value="${forecastConfig.override_min_column_width || '0'}"
+                @change="${(e) => this._valueChanged(e, 'forecast.override_min_column_width')}"
               ></ha-textfield>
               </div>
             </div>
